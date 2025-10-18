@@ -136,7 +136,7 @@ def api_user():
     if resp.status_code != 200:
         return {'error': 'Bitrix24 user.current error'}, 500
     data = resp.json().get('result', {})
-    # Имя пользователя
+    # Имя пользователя 2
     name = (data.get('NAME', '') + ' ' + data.get('LAST_NAME', '')).strip() or data.get('name', '')
     # Фото пользователя
     icon = data.get('PERSONAL_PHOTO', '') or data.get('PERSONAL_PHOTO_SRC', '') or data.get('PERSONAL_PHOTO_URL', '') or data.get('personalPhoto', '') or data.get('photo', '') or data.get('icon', '')
