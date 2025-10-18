@@ -72,7 +72,7 @@ function populateProjectsDropdown() {
     
     // Добавляем проекты в выпадающий список, но только те, в которых у пользователя есть задачи
     const projectIds = Object.keys(projects)
-        .filter(id => projectsWithMyTasks.has(id)) // Только проекты с моими задачами
+        .filter(id => projectsWithMyTasks.has(id)) // Только проекты с моими  задачами
         .sort((a, b) => projects[a].name.localeCompare(projects[b].name, 'ru'));
     
     for (const projectId of projectIds) {
