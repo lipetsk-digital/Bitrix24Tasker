@@ -1,0 +1,78 @@
+name: Build, Push to GHCR and Deploy
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  REGISTRY: ghcr.io
+  # Формат: ghcr.io/OWNER/REPO-NAME/IMAGE-NAME
+  IMAGE_NAME: ghcr.io/${{ github.repository }}/bitrix24-server
+
+jobs:
+
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.IMAGE_NAME }}
+        tags: |
+          type=sha,prefix=
+          type=ref,event=branch
+          latest
+
+    - name: Build and push
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+          
+
+  deploy:
+    needs: [build-and-push]
+    runs-on: self-hosted
+    permissions:
+      contents: read
+
+    steps:
+    - name: Deploy to production
+      run: |
+          # Логинимся в GitHub Container Registry
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login -u ${{ github.actor }} --password-stdin ${{ env.REGISTRY }}
+          
+          # Переходим в директорию с docker-compose.yml
+          cd ~/docker
+
+          # Пуллим последний образ
+          docker compose pull bitrix24tasker
+          
+          # Останавливаем и удаляем старый контейнер
+          docker compose down bitrix24tasker
+          docker compose up bitrix24tasker -d
+
+          # Очищаем старые образы для экономии места
+          docker image prune -f
