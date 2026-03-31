@@ -21,6 +21,11 @@ import json
 def api_tasks():
     if not BITRIX_WEBHOOK:
         return 'BITRIX_WEBHOOK env variable not set', 500
+    
+    # Получаем параметр режима из query параметров
+    from flask import request
+    mode = request.args.get('mode', 'fromme')
+    
     url = f'{BITRIX_WEBHOOK}tasks.task.list'
     user_url = f'{BITRIX_WEBHOOK}user.current'
     headers = {
@@ -58,6 +63,7 @@ def api_tasks():
 
     def generate():
         import sys
+        import json as json_module
         start = 0
         page_size = 50
         while True:
@@ -65,6 +71,11 @@ def api_tasks():
                 'start': start,
                 'NAV_PARAMS[nPageSize]': page_size
             }
+            
+            # Если режим fromme, добавляем фильтр по CREATED_BY
+            if mode == 'fromme':
+                params['filter[CREATED_BY]'] = user_id
+            
             resp = requests.get(url, headers=headers, params=params, stream=True)
             if resp.status_code != 200:
                 yield json.dumps({'error': 'Bitrix24 API error'}) + '\n'

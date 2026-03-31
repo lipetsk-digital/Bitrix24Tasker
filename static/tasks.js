@@ -20,6 +20,7 @@ let projects = {}; // Объект для хранения проектов
 let projectsWithMyTasks = new Set(); // Множество для хранения ID проектов, в которых у меня есть задачи
 let projectTaskCounts = {}; // Объект для хранения количества задач по проектам
 let currentUserData = {}; // Данные о текущем пользователе
+let currentMode = 'fromme'; // Текущий режим (fromme или all)
 
 // Функция для подсчета задач по проектам
 function updateProjectTaskCounts() {
@@ -252,7 +253,7 @@ async function loadTasks() {
     projectsWithMyTasks.clear();
     projectTaskCounts = {};
     try {
-        let response = await fetch('/api/tasks');
+        let response = await fetch(`/api/tasks?mode=${currentMode}`);
         if (!response.ok) {
             document.getElementById('tasks').innerHTML = 'Ошибка загрузки задач';
             showSpinner();
@@ -337,7 +338,32 @@ async function loadUser() {
 
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Получаем параметр mode из URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const modeParam = urlParams.get('mode');
+    
+    // Устанавливаем режим на основе параметра URL
+    if (modeParam === 'all') {
+        currentMode = 'all';
+    } else {
+        currentMode = 'fromme'; // По умолчанию "Поручил" (fromme)
+    }
+    
     loadUser();
+    
+    // Установка режима в dropdown
+    const modeSelect = document.getElementById('mode-filter');
+    if (modeSelect) {
+        modeSelect.value = currentMode;
+        modeSelect.addEventListener('change', () => {
+            currentMode = modeSelect.value;
+            // Обновляем URL и перезагружаем задачи
+            const newUrl = new URL(window.location);
+            newUrl.searchParams.set('mode', currentMode);
+            window.history.pushState({}, '', newUrl);
+            loadTasks();
+        });
+    }
     
     // Ensure the checkbox is unchecked initially
     const flag = document.getElementById('show-completed');
