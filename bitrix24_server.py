@@ -40,98 +40,99 @@ def api_tasks():
     if not user_id:
         return Response(json.dumps({'error': 'Bitrix24 user.current error'}), mimetype='text/plain; charset=utf-8')
 
-    def is_user_in_task(task, user_id):
-        # Исполнитель
-        if str(task.get('responsibleId', '')) == user_id:
-            return True
-        # Постановщик
-        if str(task.get('createdBy', '')) == user_id:
-            return True
-        # Соисполнители
-        accomplices = task.get('accomplices', [])
-        if isinstance(accomplices, str):
-            accomplices = accomplices.split(',')
-        if user_id in [str(a) for a in accomplices]:
-            return True
-        # Наблюдатели
-        auditors = task.get('auditors', [])
-        if isinstance(auditors, str):
-            auditors = auditors.split(',')
-        if user_id in [str(a) for a in auditors]:
-            return True
-        return False
-
     def generate():
         import sys
         import json as json_module
-        start = 0
         page_size = 50
-        while True:
-            params = {
-                'start': start,
-                'NAV_PARAMS[nPageSize]': page_size
-            }
-            
-            # Если режим fromme, добавляем фильтр по CREATED_BY
-            if mode == 'fromme':
-                params['filter[CREATED_BY]'] = user_id
-            
-            resp = requests.get(url, headers=headers, params=params, stream=True)
-            if resp.status_code != 200:
-                yield json.dumps({'error': 'Bitrix24 API error'}) + '\n'
-                break
-            data = resp.json()
-            tasks = data.get('result', {}).get('tasks', [])
-            if not tasks:
-                break
-            for task in tasks:
-                filtered = is_user_in_task(task, user_id)
-                title = task.get('title', 'Без названия') if filtered else None
-                responsible = 'Не назначен'
-                responsible_icon = ''
-                if 'responsible' in task and isinstance(task['responsible'], dict):
-                    responsible = task['responsible'].get('name', 'Не назначен')
-                    responsible_icon = task['responsible'].get('icon', '')
-                    if responsible_icon and responsible_icon.startswith('/'):
-                        # Получить протокол и домен из BITRIX_WEBHOOK
-                        from urllib.parse import urlparse
-                        parsed = urlparse(BITRIX_WEBHOOK)
-                        responsible_icon = f"{parsed.scheme}://{parsed.netloc}{responsible_icon}"
-                elif 'responsibleId' in task:
-                    responsible = f"ID: {task['responsibleId']}"
-                creator = task.get('creator', {})
-                creator_name = creator.get('name', '')
-                # Получаем данные о группе/проекте задачи, если они есть
-                group_data = None
-                if 'group' in task and isinstance(task['group'], dict):
-                    group_data = {
-                        'id': task['group'].get('ID') or task['group'].get('id', ''),
-                        'name': task['group'].get('NAME') or task['group'].get('name', ''),
-                        'image': task['group'].get('IMAGE') or task['group'].get('image', ''),
-                        'opened': task['group'].get('OPENED', False) or task['group'].get('opened', False),
-                        'membersCount': task['group'].get('MEMBERS_COUNT', 0) or task['group'].get('membersCount', 0)
-                    }
-                    # Преобразуем относительные ссылки на абсолютные для изображений проектов
-                    if group_data['image'] and group_data['image'].startswith('/'):
-                        from urllib.parse import urlparse
-                        parsed = urlparse(BITRIX_WEBHOOK)
-                        group_data['image'] = f"{parsed.scheme}://{parsed.netloc}{group_data['image']}"
+        all_task_ids = set()  # Отслеживаем уникальные задачи по ID
+        
+        # Определяем какие фильтры применять в зависимости от режима
+        filters_to_apply = []
+        if mode == 'fromme':
+            filters_to_apply = [{'CREATED_BY': user_id}]
+        else:  # mode == 'all'
+            filters_to_apply = [
+                {'CREATED_BY': user_id},
+                {'RESPONSIBLE_ID': user_id},
+                {'ACCOMPLICE': user_id},
+                {'AUDITOR': user_id}
+            ]
+        
+        # Выполняем запросы для каждого фильтра
+        for filter_dict in filters_to_apply:
+            start = 0
+            while True:
+                params = {
+                    'start': start,
+                    'NAV_PARAMS[nPageSize]': page_size
+                }
+                
+                # Добавляем фильтр в параметры запроса
+                for key, value in filter_dict.items():
+                    params[f'filter[{key}]'] = value
+                
+                resp = requests.get(url, headers=headers, params=params, stream=True)
+                if resp.status_code != 200:
+                    yield json.dumps({'error': 'Bitrix24 API error'}) + '\n'
+                    break
+                
+                data = resp.json()
+                tasks = data.get('result', {}).get('tasks', [])
+                if not tasks:
+                    break
+                
+                for task in tasks:
+                    task_id = task.get('id', '') or task.get('ID', '')
+                    # Пропускаем задачу, если мы её уже обработали
+                    if task_id and task_id not in all_task_ids:
+                        all_task_ids.add(task_id)
+                        
+                        title = task.get('title', 'Без названия')
+                        responsible = 'Не назначен'
+                        responsible_icon = ''
+                        if 'responsible' in task and isinstance(task['responsible'], dict):
+                            responsible = task['responsible'].get('name', 'Не назначен')
+                            responsible_icon = task['responsible'].get('icon', '')
+                            if responsible_icon and responsible_icon.startswith('/'):
+                                from urllib.parse import urlparse
+                                parsed = urlparse(BITRIX_WEBHOOK)
+                                responsible_icon = f"{parsed.scheme}://{parsed.netloc}{responsible_icon}"
+                        elif 'responsibleId' in task:
+                            responsible = f"ID: {task['responsibleId']}"
+                        creator = task.get('creator', {})
+                        creator_name = creator.get('name', '')
+                        # Получаем данные о группе/проекте задачи, если они есть
+                        group_data = None
+                        if 'group' in task and isinstance(task['group'], dict):
+                            group_data = {
+                                'id': task['group'].get('ID') or task['group'].get('id', ''),
+                                'name': task['group'].get('NAME') or task['group'].get('name', ''),
+                                'image': task['group'].get('IMAGE') or task['group'].get('image', ''),
+                                'opened': task['group'].get('OPENED', False) or task['group'].get('opened', False),
+                                'membersCount': task['group'].get('MEMBERS_COUNT', 0) or task['group'].get('membersCount', 0)
+                            }
+                            # Преобразуем относительные ссылки на абсолютные для изображений проектов
+                            if group_data['image'] and group_data['image'].startswith('/'):
+                                from urllib.parse import urlparse
+                                parsed = urlparse(BITRIX_WEBHOOK)
+                                group_data['image'] = f"{parsed.scheme}://{parsed.netloc}{group_data['image']}"
 
-                yield json.dumps({
-                    'title': title,
-                    'responsible': responsible,
-                    'responsible_icon': responsible_icon,
-                    'creator': creator_name,
-                    'is_filtered': filtered,
-                    'deadline': task.get('deadline', ''),
-                    'createdDate': task.get('createdDate', ''),
-                    'status': task.get('status', ''),
-                    'closed': task.get('closed', False),
-                    'group': group_data,
-                    'id': task.get('id', '') or task.get('ID', '')
-                }, ensure_ascii=False) + '\n'
-                sys.stdout.flush()
-            start += page_size
+                        yield json.dumps({
+                            'title': title,
+                            'responsible': responsible,
+                            'responsible_icon': responsible_icon,
+                            'creator': creator_name,
+                            'is_filtered': True,
+                            'deadline': task.get('deadline', ''),
+                            'createdDate': task.get('createdDate', ''),
+                            'status': task.get('status', ''),
+                            'closed': task.get('closed', False),
+                            'group': group_data,
+                            'id': task.get('id', '') or task.get('ID', '')
+                        }, ensure_ascii=False) + '\n'
+                        sys.stdout.flush()
+                
+                start += page_size
     return Response(generate(), mimetype='text/plain; charset=utf-8')
 
 # API для получения текущего пользователя Bitrix24
