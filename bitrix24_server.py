@@ -42,6 +42,7 @@ def api_tasks():
 
     def generate():
         import sys
+        import re
         import json as json_module
         page_size = 50
         all_task_ids = set()  # Отслеживаем уникальные задачи по ID
@@ -62,10 +63,13 @@ def api_tasks():
         for filter_dict in filters_to_apply:
             start = 0
             while True:
+                select_fields = ['ID', 'TITLE', 'RESPONSIBLE_ID', 'CREATED_BY', 'DEADLINE', 'CREATED_DATE', 'STATUS', 'CLOSED_DATE', 'GROUP_ID', 'TAGS']
                 params = {
                     'start': start,
                     'NAV_PARAMS[nPageSize]': page_size
                 }
+                for i, field in enumerate(select_fields):
+                    params[f'select[{i}]'] = field
                 
                 # Добавляем фильтр в параметры запроса
                 for key, value in filter_dict.items():
@@ -117,6 +121,19 @@ def api_tasks():
                                 parsed = urlparse(BITRIX_WEBHOOK)
                                 group_data['image'] = f"{parsed.scheme}://{parsed.netloc}{group_data['image']}"
 
+                        # Извлекаем номер версии из тэгов вида 'v123'
+                        version = 0
+                        tags = task.get('tags', {}) or task.get('TAGS', {})
+                        if isinstance(tags, dict):
+                            tags = tags.values()
+                        if isinstance(tags, list):
+                            pass  # уже список
+                        for tag in tags:
+                            tag_title = tag.get('title', '') if isinstance(tag, dict) else str(tag)
+                            m = re.fullmatch(r'v(\d+)', tag_title, re.IGNORECASE)
+                            if m:
+                                version = max(version, int(m.group(1)))
+
                         yield json.dumps({
                             'title': title,
                             'responsible': responsible,
@@ -128,7 +145,8 @@ def api_tasks():
                             'status': task.get('status', ''),
                             'closed': task.get('closed', False),
                             'group': group_data,
-                            'id': task.get('id', '') or task.get('ID', '')
+                            'id': task.get('id', '') or task.get('ID', ''),
+                            'version': version
                         }, ensure_ascii=False) + '\n'
                         sys.stdout.flush()
                 

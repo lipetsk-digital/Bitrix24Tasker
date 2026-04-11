@@ -34,6 +34,26 @@
 .task-overdue {
     color: #e74c3c !important;
 }
+/* Кнопка создания задачи */
+.btn-add-task {
+    margin-left: 8px;
+    width: 22px;
+    height: 22px;
+    border: 1px solid #bbb;
+    border-radius: 50%;
+    background: #fff;
+    color: #555;
+    font-size: 16px;
+    line-height: 20px;
+    text-align: center;
+    padding: 0;
+    cursor: pointer;
+    vertical-align: middle;
+}
+.btn-add-task:hover {
+    background: #e0e0e0;
+    color: #222;
+}
 /* Шапка */
 .header {
     display: flex;

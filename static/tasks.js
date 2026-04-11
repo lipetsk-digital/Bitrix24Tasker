@@ -324,6 +324,15 @@ async function loadUser() {
         // Сохраняем информацию о пользователе для генерации ссылок на задачи
         currentUserData = user;
         
+        // Показываем кнопку создания задачи
+        const addBtn = document.getElementById('btn-add-task');
+        if (addBtn && user.baseUrl && user.id) {
+            addBtn.style.display = '';
+            addBtn.onclick = () => {
+                window.open(`${user.baseUrl}/company/personal/user/${user.id}/tasks/task/edit/0/`, '_blank');
+            };
+        }
+        
         const avatar = document.getElementById('user-avatar');
         if (avatar) {
             let html = '';
