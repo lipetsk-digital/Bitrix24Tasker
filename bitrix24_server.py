@@ -169,6 +169,47 @@ def api_tasks():
                 start += page_size
     return Response(generate(), mimetype='text/plain; charset=utf-8')
 
+# API для обновления версии задач (добавление тэга vNNN)
+@app.route('/api/setversion', methods=['POST'])
+def api_setversion():
+    if not BITRIX_WEBHOOK:
+        return {'error': 'BITRIX_WEBHOOK env variable not set'}, 500
+
+    from flask import request
+    data = request.get_json()
+    if not data:
+        return {'error': 'No JSON body'}, 400
+
+    tasks = data.get('tasks', [])
+    version = data.get('version')
+    if not tasks or version is None:
+        return {'error': 'Missing tasks or version'}, 400
+
+    version_tag = f'v{int(version)}'
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+    results = []
+    for task_item in tasks:
+        task_id = task_item.get('id')
+        tags_str = task_item.get('tags', '')
+        if not task_id:
+            continue
+
+        # Формируем список тэгов: переданные + тэг версии
+        tag_list = [t for t in tags_str.split(',') if t] if tags_str else []
+        tag_list.append(version_tag)
+
+        url = f'{BITRIX_WEBHOOK}tasks.task.update'
+        params = {'taskId': task_id}
+        for i, tag in enumerate(tag_list):
+            params[f'fields[TAGS][{i}]'] = tag
+
+        resp = requests.post(url, headers=headers, data=params)
+        results.append({'id': task_id, 'ok': resp.status_code == 200})
+
+    return {'results': results}
+
 # API для получения текущего пользователя Bitrix24
 @app.route('/api/user')
 def api_user():

@@ -28,7 +28,11 @@
                 <option value="list">Список</option>
                 <option value="inventory">Инвентаризация</option>
             </select>
-            <label class="header-flag"><input type="checkbox" id="show-completed"> в т.ч. завершённые</label>
+            <select id="status-filter" class="header-select">
+                <option value="active">В работе</option>
+                <option value="control" selected>В работе и ждут контроля</option>
+                <option value="all">Все задачи</option>
+            </select>
         </div>
         <div class="header-divider"></div>
         <div class="header-section header-counters" id="header-right">

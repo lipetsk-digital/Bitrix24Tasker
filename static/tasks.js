@@ -110,8 +110,8 @@ function renderGroupsFiltered() {
 
 // Фильтрация задач по текущим настройкам (проект, завершённые)
 function getFilteredTasks() {
-    const checkbox = document.getElementById('show-completed');
-    const showCompleted = checkbox ? checkbox.checked : false;
+    const statusSelect = document.getElementById('status-filter');
+    const statusMode = statusSelect ? statusSelect.value : 'active';
     
     const projectSelect = document.getElementById('project-filter');
     const selectedProject = projectSelect ? projectSelect.value : 'all';
@@ -121,7 +121,8 @@ function getFilteredTasks() {
         if (!task.is_filtered) continue;
         
         let status = String(task.status);
-        if (!showCompleted && (status === '4' || status === '5')) continue;
+        if (statusMode === 'active' && status !== '2' && status !== '3' && status !== '6') continue;
+        if (statusMode === 'control' && status !== '2' && status !== '3' && status !== '4' && status !== '6') continue;
         
         if (selectedProject !== 'all') {
             const taskProjectId = task.group?.id || null;
@@ -441,6 +442,38 @@ async function lightRefresh() {
         lastFetchTimestamp = new Date().toISOString();
         const data = await fetchTasksFromServer(prevTimestamp);
 
+        // В режиме инвентаризации присваиваем изменённым задачам текущую версию
+        const viewMode = document.getElementById('view-mode');
+        if (viewMode && viewMode.value === 'inventory' && data.newTasks.length > 0) {
+            // Определяем MAX версию по всем задачам (включая уже загруженные)
+            const allVersions = allTasks.map(t => t.version || 0).concat(data.newTasks.map(t => t.version || 0));
+            const uniqueVersions = new Set(allVersions);
+            let MAX;
+            if (uniqueVersions.size <= 1) {
+                MAX = (allVersions[0] || 0) + 1;
+            } else {
+                MAX = Math.max(...allVersions);
+            }
+            // Собираем задачи для обновления версии
+            const tasksToUpdate = data.newTasks.map(t => ({
+                id: t.id,
+                tags: t.tags || ''
+            }));
+            try {
+                await fetch('/api/setversion', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({tasks: tasksToUpdate, version: MAX})
+                });
+                // Обновляем version у загруженных задач локально
+                for (const t of data.newTasks) {
+                    t.version = MAX;
+                }
+            } catch (e) {
+                // ignore setversion errors
+            }
+        }
+
         // Обновляем или добавляем изменённые задачи в allTasks
         for (const updatedTask of data.newTasks) {
             const idx = allTasks.findIndex(t => t.id === updatedTask.id);
@@ -464,6 +497,7 @@ async function lightRefresh() {
         updateProjectTaskCounts();
         populateProjectsDropdown();
         renderGroupsFiltered();
+
         showCheckmark();
     } catch(e) {
         showCheckmark();
@@ -532,11 +566,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // Ensure the checkbox is unchecked initially
-    const flag = document.getElementById('show-completed');
-    if (flag) {
-        flag.checked = false;
-        flag.addEventListener('change', () => {
+    // Обработчик фильтра по статусу задач
+    const statusFilter = document.getElementById('status-filter');
+    if (statusFilter) {
+        statusFilter.addEventListener('change', () => {
             renderGroupsFiltered();
         });
     }
