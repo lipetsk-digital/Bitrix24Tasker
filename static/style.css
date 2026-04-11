@@ -169,8 +169,34 @@
 @media (max-width: 800px) {
     #tasks { column-width: 220px; }
 }
-@media (max-width: 500px) {
-    #tasks { column-width: 100%; }
+@media (max-width: 600px) {
+    /* Шапка: вертикальная раскладка */
+    .header {
+        flex-direction: column;
+        height: auto;
+        min-height: auto;
+        padding: 6px 8px;
+        gap: 4px;
+    }
+    .header-section {
+        flex-wrap: wrap;
+        justify-content: center;
+        padding: 2px 0;
+    }
+    .header-divider {
+        width: 80%;
+        height: 1px;
+        margin: 2px 0;
+    }
+    /* Задачи: одна колонка */
+    #tasks {
+        column-width: 100% !important;
+        columns: 1 !important;
+    }
+    /* Инвентаризация: одна колонка */
+    #tasks.inventory-columns {
+        flex-direction: column;
+    }
 }
 body {
     background-color: #f8f9fa;
