@@ -150,7 +150,8 @@ function groupByResponsible(tasks) {
             date: task.deadline || '',
             status: task.status,
             id: task.id || '',
-            version: task.version || 0
+            version: task.version || 0,
+            tags: task.tags || ''
         });
     }
     return Object.values(byResponsible).sort((a, b) => {
@@ -219,6 +220,44 @@ function createTaskLi(t) {
         li.classList.add('task-status-5');
     }
     
+    return li;
+}
+
+// Создание DOM-элемента задачи с кнопкой обновления версии (для левой колонки инвентаризации)
+function createTaskLiInventory(t, targetVersion) {
+    const li = createTaskLi(t);
+
+    const btn = document.createElement('span');
+    btn.textContent = '🡆';
+    btn.className = 'btn-upgrade-version';
+    btn.title = `Перевести в версию ${targetVersion}`;
+    btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        btn.style.pointerEvents = 'none';
+        btn.style.opacity = '0.4';
+        try {
+            const resp = await fetch('/api/setversion', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({tasks: [{id: t.id, tags: t.tags || ''}], version: targetVersion})
+            });
+            if (resp.ok) {
+                // Обновляем version в allTasks
+                const idx = allTasks.findIndex(task => task.id === t.id);
+                if (idx !== -1) {
+                    allTasks[idx].version = targetVersion;
+                }
+                renderGroupsFiltered();
+            } else {
+                btn.style.pointerEvents = '';
+                btn.style.opacity = '';
+            }
+        } catch (e) {
+            btn.style.pointerEvents = '';
+            btn.style.opacity = '';
+        }
+    });
+    li.appendChild(btn);
     return li;
 }
 
@@ -299,7 +338,22 @@ function renderInventory() {
     } else {
         const leftGroups = groupByResponsible(leftTasks);
         for (const group of leftGroups) {
-            renderGroupInto(leftCol, group);
+            // Рендерим левую колонку с кнопкой перевода в новую версию
+            let iconHtml = '';
+            if (group.icon) {
+                iconHtml = `<img src="${group.icon}" alt="" style="width:22px;height:22px;border-radius:50%;vertical-align:middle;margin-right:6px;">`;
+            }
+            const header = document.createElement('div');
+            header.innerHTML = `<p style="margin-bottom:2px;margin-top:12px;"><b>${iconHtml}${group.name}</b></p>`;
+            leftCol.appendChild(header);
+            const ul = document.createElement('ul');
+            ul.style.marginTop = '0px';
+            ul.style.marginBottom = '8px';
+            group.tasks.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+            for (const t of group.tasks) {
+                ul.appendChild(createTaskLiInventory(t, MAX));
+            }
+            leftCol.appendChild(ul);
         }
     }
     

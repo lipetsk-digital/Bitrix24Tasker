@@ -54,6 +54,19 @@
     background: #e0e0e0;
     color: #222;
 }
+/* Кнопка перевода задачи в новую версию */
+.btn-upgrade-version {
+    margin-left: 8px;
+    color: #27ae60;
+    font-size: 1.1em;
+    cursor: pointer;
+    vertical-align: middle;
+    user-select: none;
+}
+.btn-upgrade-version:hover {
+    color: #1a7a40;
+}
+
 /* Режим инвентаризации — две колонки */
 #tasks.inventory-columns {
     column-width: unset;
