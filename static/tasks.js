@@ -156,7 +156,9 @@ function groupByResponsible(tasks) {
         });
     }
     return Object.values(byResponsible).sort((a, b) => {
-        if (b.tasks.length !== a.tasks.length) return b.tasks.length - a.tasks.length;
+        const currentName = currentUserData.name || '';
+        if (a.name === currentName) return -1;
+        if (b.name === currentName) return 1;
         return (a.name || '').localeCompare(b.name || '', 'ru');
     });
 }
