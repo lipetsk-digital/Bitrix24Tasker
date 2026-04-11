@@ -25,6 +25,7 @@ def api_tasks():
     # Получаем параметр режима из query параметров
     from flask import request
     mode = request.args.get('mode', 'fromme')
+    update_from = request.args.get('update_from', '')
     
     url = f'{BITRIX_WEBHOOK}tasks.task.list'
     user_url = f'{BITRIX_WEBHOOK}user.current'
@@ -63,7 +64,7 @@ def api_tasks():
         for filter_dict in filters_to_apply:
             start = 0
             while True:
-                select_fields = ['ID', 'TITLE', 'RESPONSIBLE_ID', 'CREATED_BY', 'DEADLINE', 'CREATED_DATE', 'STATUS', 'CLOSED_DATE', 'GROUP_ID', 'TAGS']
+                select_fields = ['ID', 'TITLE', 'RESPONSIBLE_ID', 'CREATED_BY', 'DEADLINE', 'CREATED_DATE', 'CHANGED_DATE', 'STATUS', 'CLOSED_DATE', 'GROUP_ID', 'TAGS']
                 params = {
                     'start': start,
                     'NAV_PARAMS[nPageSize]': page_size
@@ -74,6 +75,16 @@ def api_tasks():
                 # Добавляем фильтр в параметры запроса
                 for key, value in filter_dict.items():
                     params[f'filter[{key}]'] = value
+                
+                # Если задан update_from, добавляем фильтр по дате изменения
+                if update_from:
+                    from datetime import datetime
+                    try:
+                        # Парсим ISO-формат из браузера и конвертируем в формат Bitrix24
+                        dt = datetime.fromisoformat(update_from.replace('Z', '+00:00'))
+                        params['filter[>=CHANGED_DATE]'] = dt.strftime('%Y-%m-%dT%H:%M:%S')
+                    except (ValueError, AttributeError):
+                        pass
                 
                 resp = requests.get(url, headers=headers, params=params, stream=True)
                 if resp.status_code != 200:
@@ -146,7 +157,8 @@ def api_tasks():
                             'closed': task.get('closed', False),
                             'group': group_data,
                             'id': task.get('id', '') or task.get('ID', ''),
-                            'version': version
+                            'version': version,
+                            'changedDate': task.get('changedDate', '') or task.get('CHANGED_DATE', '')
                         }, ensure_ascii=False) + '\n'
                         sys.stdout.flush()
                 

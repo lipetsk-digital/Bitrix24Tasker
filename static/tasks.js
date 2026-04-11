@@ -21,6 +21,8 @@ let projectsWithMyTasks = new Set(); // Множество для хранени
 let projectTaskCounts = {}; // Объект для хранения количества задач по проектам
 let currentUserData = {}; // Данные о текущем пользователе
 let currentMode = 'fromme'; // Текущий режим (fromme или all)
+let lastFetchTimestamp = ''; // ISO-время начала последнего запроса
+let isUpdating = false; // Флаг, что обновление уже идёт
 
 // Функция для подсчета задач по проектам
 function updateProjectTaskCounts() {
@@ -247,13 +249,17 @@ function renderGroupsFiltered() {
 }
 
 // Загрузка задач с сервера (внутренняя функция, возвращает данные)
-async function fetchTasksFromServer() {
+async function fetchTasksFromServer(updateFrom) {
     let newTasks = [];
     let newProjects = {};
     let newProjectsWithMyTasks = new Set();
     let count = 0;
 
-    let response = await fetch(`/api/tasks?mode=${currentMode}`);
+    let url = `/api/tasks?mode=${currentMode}`;
+    if (updateFrom) {
+        url += `&update_from=${encodeURIComponent(updateFrom)}`;
+    }
+    let response = await fetch(url);
     if (!response.ok) throw new Error('Ошибка загрузки задач');
 
     let reader = response.body.getReader();
@@ -307,6 +313,8 @@ function applyTaskData(data) {
 
 // Функция для загрузки задач с сервера (первоначальная)
 async function loadTasks() {
+    if (isUpdating) return;
+    isUpdating = true;
     showSpinner();
     allTasks = [];
     loadedCount = 0;
@@ -314,24 +322,77 @@ async function loadTasks() {
     projectsWithMyTasks.clear();
     projectTaskCounts = {};
     try {
+        lastFetchTimestamp = new Date().toISOString();
         const data = await fetchTasksFromServer();
         applyTaskData(data);
         showCheckmark();
     } catch(e) {
         document.getElementById('tasks').innerHTML = 'Ошибка: ' + e;
         showSpinner();
+    } finally {
+        isUpdating = false;
     }
 }
 
 // Функция обновления задач без очистки текущего списка
 async function refreshTasks() {
+    if (isUpdating) return;
+    isUpdating = true;
     showSpinner();
     try {
+        lastFetchTimestamp = new Date().toISOString();
         const data = await fetchTasksFromServer();
         applyTaskData(data);
         showCheckmark();
     } catch(e) {
         showCheckmark();
+    } finally {
+        isUpdating = false;
+    }
+}
+
+// Лайтовое обновление: загружает только изменённые задачи и обновляет их в списке
+async function lightRefresh() {
+    if (isUpdating) return;
+    if (!lastFetchTimestamp) {
+        // Если нет предыдущего запроса, делаем полное обновление
+        return refreshTasks();
+    }
+    isUpdating = true;
+    showSpinner();
+    try {
+        const prevTimestamp = lastFetchTimestamp;
+        lastFetchTimestamp = new Date().toISOString();
+        const data = await fetchTasksFromServer(prevTimestamp);
+
+        // Обновляем или добавляем изменённые задачи в allTasks
+        for (const updatedTask of data.newTasks) {
+            const idx = allTasks.findIndex(t => t.id === updatedTask.id);
+            if (idx !== -1) {
+                allTasks[idx] = updatedTask;
+            } else {
+                allTasks.push(updatedTask);
+            }
+        }
+
+        // Обновляем проекты
+        for (const [pid, proj] of Object.entries(data.newProjects)) {
+            projects[pid] = proj;
+        }
+        for (const pid of data.newProjectsWithMyTasks) {
+            projectsWithMyTasks.add(pid);
+        }
+
+        loadedCount = allTasks.length;
+        document.getElementById('loaded').textContent = loadedCount;
+        updateProjectTaskCounts();
+        populateProjectsDropdown();
+        renderGroupsFiltered();
+        showCheckmark();
+    } catch(e) {
+        showCheckmark();
+    } finally {
+        isUpdating = false;
     }
 }
 
@@ -420,4 +481,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (refreshBtn) {
         refreshBtn.addEventListener('click', () => refreshTasks());
     }
+    
+    // Лайтовое обновление при возврате на вкладку
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            lightRefresh();
+        }
+    });
 });
