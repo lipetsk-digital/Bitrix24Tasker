@@ -54,6 +54,26 @@
     background: #e0e0e0;
     color: #222;
 }
+/* Режим инвентаризации — две колонки */
+#tasks.inventory-columns {
+    column-width: unset;
+    column-gap: unset;
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+}
+.inventory-col {
+    flex: 1;
+    min-width: 0;
+}
+.inventory-col-title {
+    margin: 0 0 8px 0;
+    padding: 4px 10px;
+    background: #e8eaed;
+    border-radius: 5px;
+    font-size: 14px;
+    text-align: center;
+}
 /* Шапка */
 .header {
     display: flex;

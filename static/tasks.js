@@ -98,154 +98,230 @@ function populateProjectsDropdown() {
 
 // Функция для рендеринга задач с учетом фильтров
 function renderGroupsFiltered() {
+    const viewMode = document.getElementById('view-mode');
+    const currentViewMode = viewMode ? viewMode.value : 'list';
+    
+    if (currentViewMode === 'inventory') {
+        renderInventory();
+    } else {
+        renderList();
+    }
+}
+
+// Фильтрация задач по текущим настройкам (проект, завершённые)
+function getFilteredTasks() {
     const checkbox = document.getElementById('show-completed');
     const showCompleted = checkbox ? checkbox.checked : false;
     
     const projectSelect = document.getElementById('project-filter');
     const selectedProject = projectSelect ? projectSelect.value : 'all';
     
-    let count = 0;
-    const byResponsible = {};
-    
+    const filtered = [];
     for (const task of allTasks) {
         if (!task.is_filtered) continue;
         
-        // Фильтрация завершённых и ожидающих контроля задач
-        // Не показываем задачи со статусами 4 (Ожидает контроля) и 5 (Завершена), если галочка снята
         let status = String(task.status);
         if (!showCompleted && (status === '4' || status === '5')) continue;
         
-        // Фильтрация по проекту
         if (selectedProject !== 'all') {
             const taskProjectId = task.group?.id || null;
-            
-            // Если выбран "Без проекта", показываем только задачи без проекта
             if (selectedProject === 'none') {
                 if (taskProjectId) continue;
-            } 
-            // Иначе показываем задачи только из выбранного проекта
-            else if (taskProjectId !== selectedProject) {
+            } else if (taskProjectId !== selectedProject) {
                 continue;
             }
         }
-        count++;
+        filtered.push(task);
+    }
+    return filtered;
+}
+
+// Группировка задач по ответственному
+function groupByResponsible(tasks) {
+    const byResponsible = {};
+    for (const task of tasks) {
         let key = (task.responsible || 'Не назначен') + '|' + (task.responsible_icon || '');
         if (!byResponsible[key]) {
             byResponsible[key] = {name: task.responsible, icon: task.responsible_icon, tasks: []};
         }
-    byResponsible[key].tasks.push({
-        title: task.title, 
-        date: task.deadline || '', 
-        status: task.status,
-        id: task.id || ''
-    });
+        byResponsible[key].tasks.push({
+            title: task.title,
+            date: task.deadline || '',
+            status: task.status,
+            id: task.id || '',
+            version: task.version || 0
+        });
     }
-    document.getElementById('count').textContent = count;
+    return Object.values(byResponsible).sort((a, b) => {
+        if (b.tasks.length !== a.tasks.length) return b.tasks.length - a.tasks.length;
+        return (a.name || '').localeCompare(b.name || '', 'ru');
+    });
+}
+
+// Создание DOM-элемента для одного элемента задачи
+function createTaskLi(t) {
+    let li = document.createElement('li');
+    
+    let taskLink = document.createElement('a');
+    if (currentUserData.baseUrl && currentUserData.id && t.id) {
+        taskLink.href = `${currentUserData.baseUrl}/company/personal/user/${currentUserData.id}/tasks/task/view/${t.id}/`;
+        taskLink.target = "_blank";
+        taskLink.textContent = t.title;
+        taskLink.classList.add('task-link');
+        li.appendChild(taskLink);
+    } else {
+        li.textContent = t.title;
+    }
+    
+    if (t.date) {
+        try {
+            const arrow = document.createElement('span');
+            arrow.textContent = '→';
+            arrow.className = 'task-arrow';
+            li.appendChild(arrow);
+            
+            const dateObj = new Date(t.date);
+            if (!isNaN(dateObj.getTime())) {
+                const day = String(dateObj.getDate()).padStart(2, '0');
+                const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                const year = dateObj.getFullYear();
+                const formattedDate = `${day}.${month}.${year}`;
+                
+                const deadline = document.createElement('span');
+                deadline.textContent = formattedDate;
+                deadline.className = 'task-deadline';
+                
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const taskDate = new Date(dateObj);
+                taskDate.setHours(0, 0, 0, 0);
+                
+                const isCompleted = t.status === '4' || t.status === 4 || t.status === '5' || t.status === 5;
+                const isOverdue = taskDate <= today && !isCompleted;
+                
+                if (isOverdue) {
+                    li.classList.add('task-overdue');
+                    arrow.classList.add('task-overdue');
+                    deadline.classList.add('task-overdue');
+                    const link = li.querySelector('.task-link');
+                    if (link) link.classList.add('task-overdue');
+                }
+                
+                li.appendChild(deadline);
+            }
+        } catch (e) {}
+    }
+    
+    if (t.status === '4' || t.status === 4) {
+        li.classList.add('task-status-4');
+    } else if (t.status === '5' || t.status === 5) {
+        li.classList.add('task-status-5');
+    }
+    
+    return li;
+}
+
+// Рендер группы задач (заголовок + список) в указанный контейнер
+function renderGroupInto(container, group) {
+    let iconHtml = '';
+    if (group.icon) {
+        iconHtml = `<img src="${group.icon}" alt="" style="width:22px;height:22px;border-radius:50%;vertical-align:middle;margin-right:6px;">`;
+    }
+    let header = document.createElement('div');
+    header.innerHTML = `<p style="margin-bottom:2px;margin-top:12px;"><b>${iconHtml}${group.name}</b></p>`;
+    container.appendChild(header);
+    let ul = document.createElement('ul');
+    ul.style.marginTop = '0px';
+    ul.style.marginBottom = '8px';
+    group.tasks.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    for (const t of group.tasks) {
+        ul.appendChild(createTaskLi(t));
+    }
+    container.appendChild(ul);
+}
+
+// Режим "Список" (стандартный)
+function renderList() {
+    const filtered = getFilteredTasks();
+    document.getElementById('count').textContent = filtered.length;
     const tasksDiv = document.getElementById('tasks');
     tasksDiv.innerHTML = '';
-    if (count === 0) {
+    tasksDiv.classList.remove('inventory-columns');
+    if (filtered.length === 0) {
         tasksDiv.innerHTML = 'Нет задач';
         return;
     }
-    const sortedGroups = Object.values(byResponsible).sort((a, b) => {
-        if (b.tasks.length !== a.tasks.length) {
-            return b.tasks.length - a.tasks.length;
-        }
-        return (a.name || '').localeCompare(b.name || '', 'ru');
-    });
+    const sortedGroups = groupByResponsible(filtered);
     for (const group of sortedGroups) {
-        let iconHtml = '';
-        if (group.icon) {
-            iconHtml = `<img src="${group.icon}" alt="" style="width:22px;height:22px;border-radius:50%;vertical-align:middle;margin-right:6px;">`;
-        }
-        let header = document.createElement('div');
-        header.innerHTML = `<p style="margin-bottom:2px;margin-top:12px;"><b>${iconHtml}${group.name}</b></p>`;
-        tasksDiv.appendChild(header);
-        let ul = document.createElement('ul');
-        ul.style.marginTop = '0px';
-        ul.style.marginBottom = '8px';
-        group.tasks.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-        for (const t of group.tasks) {
-            let li = document.createElement('li');
-            
-            // Создаем ссылку на задачу
-            let taskLink = document.createElement('a');
-            
-            // Формируем URL задачи по шаблону: протокол://домен/company/personal/user/ID_пользователя/tasks/task/view/ID_задачи/
-            if (currentUserData.baseUrl && currentUserData.id && t.id) {
-                taskLink.href = `${currentUserData.baseUrl}/company/personal/user/${currentUserData.id}/tasks/task/view/${t.id}/`;
-                taskLink.target = "_blank"; // Открывать в новой вкладке
-                taskLink.textContent = t.title;
-                taskLink.classList.add('task-link'); // Применяем стиль для ссылок
-                li.appendChild(taskLink);
-            } else {
-                // Если данные для ссылки недоступны, просто выводим текст
-                li.textContent = t.title;
-            }
-            
-            // Добавляем стрелочку и срок выполнения, если он есть
-            if (t.date) {
-                try {
-                    // Добавляем стрелочку
-                    const arrow = document.createElement('span');
-                    arrow.textContent = '→';
-                    arrow.className = 'task-arrow';
-                    li.appendChild(arrow);
-                    
-                    // Преобразуем дату из формата ISO в формат DD.MM.YYYY
-                    const dateObj = new Date(t.date);
-                    if (!isNaN(dateObj.getTime())) {
-                        const day = String(dateObj.getDate()).padStart(2, '0');
-                        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-                        const year = dateObj.getFullYear();
-                        const formattedDate = `${day}.${month}.${year}`;
-                        
-                        const deadline = document.createElement('span');
-                        deadline.textContent = formattedDate;
-                        deadline.className = 'task-deadline';
-                        
-                        // Проверяем, не просрочена ли задача
-                        // Задача просрочена, если:
-                        // 1. Срок выполнения меньше или равен текущей дате
-                        // 2. Задача не имеет статусов 4 или 5 (не завершена и не на контроле)
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0); // Сбрасываем время для корректного сравнения дат
-                        const taskDate = new Date(dateObj);
-                        taskDate.setHours(0, 0, 0, 0);
-                        
-                        const isCompleted = t.status === '4' || t.status === 4 || t.status === '5' || t.status === 5;
-                        const isOverdue = taskDate <= today && !isCompleted;
-                        
-                        if (isOverdue) {
-                            // Если задача просрочена, делаем её красной
-                            li.classList.add('task-overdue');
-                            arrow.classList.add('task-overdue');
-                            deadline.classList.add('task-overdue');
-                            // Также добавляем класс к ссылке задачи, если она есть
-                            const taskLink = li.querySelector('.task-link');
-                            if (taskLink) {
-                                taskLink.classList.add('task-overdue');
-                            }
-                        }
-                        
-                        li.appendChild(deadline);
-                    }
-                } catch (e) {
-                    // В случае ошибки парсинга даты - ничего не делаем
-                }
-            }
-            
-            // Применяем стили в зависимости от статуса
-            if (t.status === '4' || t.status === 4) {
-                li.classList.add('task-status-4');
-            } else if (t.status === '5' || t.status === 5) {
-                li.classList.add('task-status-5');
-            }
-            
-            ul.appendChild(li);
-        }
-        tasksDiv.appendChild(ul);
+        renderGroupInto(tasksDiv, group);
     }
+}
+
+// Режим "Инвентаризация" (две колонки по версиям)
+function renderInventory() {
+    const filtered = getFilteredTasks();
+    document.getElementById('count').textContent = filtered.length;
+    const tasksDiv = document.getElementById('tasks');
+    tasksDiv.innerHTML = '';
+    tasksDiv.classList.add('inventory-columns');
+    
+    if (filtered.length === 0) {
+        tasksDiv.innerHTML = 'Нет задач';
+        return;
+    }
+    
+    // Определяем MAX
+    const versions = filtered.map(t => t.version || 0);
+    const uniqueVersions = new Set(versions);
+    let MAX;
+    if (uniqueVersions.size <= 1) {
+        // Все одинаковые — MAX = текущая версия + 1
+        MAX = (versions[0] || 0) + 1;
+    } else {
+        MAX = Math.max(...versions);
+    }
+    
+    const leftTasks = filtered.filter(t => (t.version || 0) < MAX);
+    const rightTasks = filtered.filter(t => (t.version || 0) === MAX);
+    
+    // Левая колонка
+    const leftCol = document.createElement('div');
+    leftCol.className = 'inventory-col';
+    const leftTitle = document.createElement('h3');
+    leftTitle.className = 'inventory-col-title';
+    leftTitle.textContent = `Версия ${MAX - 1}`;
+    leftCol.appendChild(leftTitle);
+    if (leftTasks.length === 0) {
+        const empty = document.createElement('p');
+        empty.textContent = 'Нет задач';
+        leftCol.appendChild(empty);
+    } else {
+        const leftGroups = groupByResponsible(leftTasks);
+        for (const group of leftGroups) {
+            renderGroupInto(leftCol, group);
+        }
+    }
+    
+    // Правая колонка
+    const rightCol = document.createElement('div');
+    rightCol.className = 'inventory-col';
+    const rightTitle = document.createElement('h3');
+    rightTitle.className = 'inventory-col-title';
+    rightTitle.textContent = `Версия ${MAX}`;
+    rightCol.appendChild(rightTitle);
+    if (rightTasks.length === 0) {
+        const empty = document.createElement('p');
+        empty.textContent = 'Нет задач';
+        rightCol.appendChild(empty);
+    } else {
+        const rightGroups = groupByResponsible(rightTasks);
+        for (const group of rightGroups) {
+            renderGroupInto(rightCol, group);
+        }
+    }
+    
+    tasksDiv.appendChild(leftCol);
+    tasksDiv.appendChild(rightCol);
 }
 
 // Загрузка задач с сервера (внутренняя функция, возвращает данные)
@@ -469,6 +545,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const projectSelect = document.getElementById('project-filter');
     if (projectSelect) {
         projectSelect.addEventListener('change', () => {
+            renderGroupsFiltered();
+        });
+    }
+    
+    // Установка обработчика для переключения режима отображения
+    const viewModeSelect = document.getElementById('view-mode');
+    if (viewModeSelect) {
+        viewModeSelect.addEventListener('change', () => {
             renderGroupsFiltered();
         });
     }
