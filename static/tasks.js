@@ -94,6 +94,7 @@ function populateProjectsDropdown() {
     }
 }
 
+// Функция для рендеринга задач с учетом фильтров
 function renderGroupsFiltered() {
     const checkbox = document.getElementById('show-completed');
     const showCompleted = checkbox ? checkbox.checked : false;
@@ -245,6 +246,66 @@ function renderGroupsFiltered() {
     }
 }
 
+// Загрузка задач с сервера (внутренняя функция, возвращает данные)
+async function fetchTasksFromServer() {
+    let newTasks = [];
+    let newProjects = {};
+    let newProjectsWithMyTasks = new Set();
+    let count = 0;
+
+    let response = await fetch(`/api/tasks?mode=${currentMode}`);
+    if (!response.ok) throw new Error('Ошибка загрузки задач');
+
+    let reader = response.body.getReader();
+    let decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, {stream: true});
+        let lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (let line of lines) {
+            if (!line.trim()) continue;
+            try {
+                let task = JSON.parse(line);
+                newTasks.push(task);
+                if (task.group && task.group.id && task.group.name) {
+                    const projectId = task.group.id;
+                    if (!newProjects[projectId]) {
+                        newProjects[projectId] = {
+                            id: projectId,
+                            name: task.group.name,
+                            image: task.group.image || ''
+                        };
+                    }
+                    if (task.is_filtered) {
+                        newProjectsWithMyTasks.add(projectId);
+                    }
+                }
+                count++;
+                document.getElementById('loaded').textContent = count;
+            } catch (e) {
+                // ignore parse errors
+            }
+        }
+    }
+    return {newTasks, newProjects, newProjectsWithMyTasks, count};
+}
+
+// Применить загруженные данные и обновить UI
+function applyTaskData(data) {
+    allTasks = data.newTasks;
+    projects = data.newProjects;
+    projectsWithMyTasks = data.newProjectsWithMyTasks;
+    loadedCount = data.count;
+    document.getElementById('loaded').textContent = loadedCount;
+    updateProjectTaskCounts();
+    populateProjectsDropdown();
+    renderGroupsFiltered();
+}
+
+// Функция для загрузки задач с сервера (первоначальная)
 async function loadTasks() {
     showSpinner();
     allTasks = [];
@@ -253,64 +314,24 @@ async function loadTasks() {
     projectsWithMyTasks.clear();
     projectTaskCounts = {};
     try {
-        let response = await fetch(`/api/tasks?mode=${currentMode}`);
-        if (!response.ok) {
-            document.getElementById('tasks').innerHTML = 'Ошибка загрузки задач';
-            showSpinner();
-            return;
-        }
-        let reader = response.body.getReader();
-        let decoder = new TextDecoder();
-        let buffer = '';
-        while(true) {
-            const {done, value} = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, {stream:true});
-            let lines = buffer.split('\n');
-            buffer = lines.pop();
-            for (let line of lines) {
-                if (!line.trim()) continue;
-                try {
-                    let task = JSON.parse(line);
-                    allTasks.push(task);
-                    
-                    // Собираем информацию о проектах
-                    if (task.group && task.group.id && task.group.name) {
-                        const projectId = task.group.id;
-                        if (!projects[projectId]) {
-                            projects[projectId] = {
-                                id: projectId,
-                                name: task.group.name,
-                                image: task.group.image || ''
-                            };
-                        }
-                        
-                        // Если это задача пользователя (is_filtered = true), добавляем проект в список проектов с задачами пользователя
-                        if (task.is_filtered) {
-                            projectsWithMyTasks.add(projectId);
-                            // Обновляем выпадающий список при обнаружении нового проекта с моими задачами
-                            populateProjectsDropdown();
-                        }
-                    }
-                    
-                    loadedCount++;
-                    document.getElementById('loaded').textContent = loadedCount;
-                    renderGroupsFiltered();
-                } catch(e) {
-                    // ignore parse errors
-                }
-            }
-        }
+        const data = await fetchTasksFromServer();
+        applyTaskData(data);
         showCheckmark();
-        // Обновляем подсчет задач по проектам
-        updateProjectTaskCounts();
-        // Убедимся, что выпадающий список заполнен проектами, где у пользователя есть задачи
-        populateProjectsDropdown();
-        // After all tasks are loaded, re-render to ensure the list matches the current filters
-        renderGroupsFiltered();
     } catch(e) {
         document.getElementById('tasks').innerHTML = 'Ошибка: ' + e;
         showSpinner();
+    }
+}
+
+// Функция обновления задач без очистки текущего списка
+async function refreshTasks() {
+    showSpinner();
+    try {
+        const data = await fetchTasksFromServer();
+        applyTaskData(data);
+        showCheckmark();
+    } catch(e) {
+        showCheckmark();
     }
 }
 
@@ -393,4 +414,10 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Load tasks after setting up the controls
     loadTasks();
+    
+    // Обработчик кнопки обновления задач
+    const refreshBtn = document.getElementById('btn-refresh');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => refreshTasks());
+    }
 });
