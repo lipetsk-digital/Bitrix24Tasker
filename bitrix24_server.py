@@ -132,8 +132,9 @@ def api_tasks():
                                 parsed = urlparse(BITRIX_WEBHOOK)
                                 group_data['image'] = f"{parsed.scheme}://{parsed.netloc}{group_data['image']}"
 
-                        # Извлекаем номер версии из тэгов вида 'v123'
+                        # Извлекаем номер версии из тэгов вида 'v123' и собираем список тэгов
                         version = 0
+                        tags_list = []
                         tags = task.get('tags', {}) or task.get('TAGS', {})
                         if isinstance(tags, dict):
                             tags = tags.values()
@@ -142,6 +143,8 @@ def api_tasks():
                         for tag in tags:
                             tag_title = tag.get('title', '') if isinstance(tag, dict) else str(tag)
                             m = re.fullmatch(r'v(\d+)', tag_title, re.IGNORECASE)
+                            if ',' not in tag_title and not m:
+                                tags_list.append(tag_title)
                             if m:
                                 version = max(version, int(m.group(1)))
 
@@ -158,6 +161,7 @@ def api_tasks():
                             'group': group_data,
                             'id': task.get('id', '') or task.get('ID', ''),
                             'version': version,
+                            'tags': ','.join(tags_list),
                             'changedDate': task.get('changedDate', '') or task.get('CHANGED_DATE', '')
                         }, ensure_ascii=False) + '\n'
                         sys.stdout.flush()
