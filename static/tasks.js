@@ -23,6 +23,7 @@ let currentUserData = {}; // Данные о текущем пользовате
 let currentMode = 'fromme'; // Текущий режим (fromme или all)
 let lastFetchTimestamp = ''; // ISO-время начала последнего запроса
 let isUpdating = false; // Флаг, что обновление уже идёт
+let highlightedTaskIds = new Set(); // Множество задач для подсветки после обновления
 
 // Функция для подсчета задач по проектам
 function updateProjectTaskCounts() {
@@ -163,6 +164,11 @@ function groupByResponsible(tasks) {
 // Создание DOM-элемента для одного элемента задачи
 function createTaskLi(t) {
     let li = document.createElement('li');
+    if (t.id) li.dataset.taskId = t.id;
+    if (highlightedTaskIds.has(t.id)) {
+        li.classList.add('task-highlight');
+        setTimeout(() => li.classList.remove('task-highlight'), 5000);
+    }
     
     let taskLink = document.createElement('a');
     if (currentUserData.baseUrl && currentUserData.id && t.id) {
@@ -247,7 +253,9 @@ function createTaskLiInventory(t, targetVersion) {
                 if (idx !== -1) {
                     allTasks[idx].version = targetVersion;
                 }
+                highlightedTaskIds = new Set([t.id]);
                 renderGroupsFiltered();
+                setTimeout(() => highlightedTaskIds.clear(), 5000);
             } else {
                 btn.style.pointerEvents = '';
                 btn.style.opacity = '';
@@ -550,7 +558,9 @@ async function lightRefresh() {
         document.getElementById('loaded').textContent = loadedCount;
         updateProjectTaskCounts();
         populateProjectsDropdown();
+        highlightedTaskIds = new Set(data.newTasks.map(t => t.id));
         renderGroupsFiltered();
+        setTimeout(() => highlightedTaskIds.clear(), 5000);
 
         showCheckmark();
     } catch(e) {

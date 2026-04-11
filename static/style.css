@@ -54,6 +54,15 @@
     background: #e0e0e0;
     color: #222;
 }
+/* Подсветка изменённых задач */
+@keyframes task-highlight-anim {
+    0%, 80% { background-color: #e0e0e0; }
+    100%     { background-color: transparent; }
+}
+.task-highlight {
+    animation: task-highlight-anim 5s ease forwards;
+}
+
 /* Кнопка перевода задачи в новую версию */
 .btn-upgrade-version {
     margin-left: 8px;

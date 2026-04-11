@@ -82,7 +82,8 @@ def api_tasks():
                     try:
                         # Парсим ISO-формат из браузера и конвертируем в формат Bitrix24
                         dt = datetime.fromisoformat(update_from.replace('Z', '+00:00'))
-                        params['filter[>=CHANGED_DATE]'] = dt.strftime('%Y-%m-%dT%H:%M:%S')
+                        dt_local = dt.astimezone()
+                        params['filter[>=CHANGED_DATE]'] = dt_local.strftime('%Y-%m-%dT%H:%M:%S')
                     except (ValueError, AttributeError):
                         pass
                 
