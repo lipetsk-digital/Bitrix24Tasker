@@ -5,10 +5,7 @@
             "name": "Запуск Bitrix24 Server",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/bitrix24_server.py",
-            "env": {
-                "BITRIX_WEBHOOK": "https://xn--b1aqt.xn--80aaacsrmdgfbxdgdi5bs2e0g8b.xn--p1ai/rest/953/7sxuxwwuf9rm4d7q/"
-            }
+            "program": "${workspaceFolder}/bitrix24_server.py"
         }
     ]
 }

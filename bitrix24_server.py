@@ -4,12 +4,18 @@ from flask import Flask, render_template
 
 app = Flask(__name__)
 
-BITRIX_WEBHOOK = os.environ.get('BITRIX_WEBHOOK')
+
+def get_webhook():
+    """Получаем URL вебхука из куки BITRIX_WEBHOOK."""
+    from flask import request
+    return request.cookies.get('BITRIX_WEBHOOK', '')
 
 
 # Главная страница
 @app.route('/')
 def index():
+    if not get_webhook():
+        return render_template('setup.html')
     return render_template('index.html')
 
 # API-эндпоинт для потоковой передачи задач
@@ -19,8 +25,9 @@ import json
 
 @app.route('/api/tasks')
 def api_tasks():
+    BITRIX_WEBHOOK = get_webhook()
     if not BITRIX_WEBHOOK:
-        return 'BITRIX_WEBHOOK env variable not set', 500
+        return 'BITRIX_WEBHOOK cookie not set', 500
     
     # Получаем параметр режима из query параметров
     from flask import request
@@ -173,8 +180,9 @@ def api_tasks():
 # API для обновления версии задач (добавление тэга vNNN)
 @app.route('/api/setversion', methods=['POST'])
 def api_setversion():
+    BITRIX_WEBHOOK = get_webhook()
     if not BITRIX_WEBHOOK:
-        return {'error': 'BITRIX_WEBHOOK env variable not set'}, 500
+        return {'error': 'BITRIX_WEBHOOK cookie not set'}, 500
 
     from flask import request
     data = request.get_json()
@@ -214,8 +222,9 @@ def api_setversion():
 # API для получения текущего пользователя Bitrix24
 @app.route('/api/user')
 def api_user():
+    BITRIX_WEBHOOK = get_webhook()
     if not BITRIX_WEBHOOK:
-        return {'error': 'BITRIX_WEBHOOK env variable not set'}, 500
+        return {'error': 'BITRIX_WEBHOOK cookie not set'}, 500
     user_url = f'{BITRIX_WEBHOOK}user.current'
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'

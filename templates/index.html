@@ -11,6 +11,7 @@
         <div class="header-section" id="header-left">
             <span>Список задач ✌</span>
             <span class="header-avatar" id="user-avatar" style="margin-left:10px;"></span>
+            <span id="btn-logout" title="Выйти" style="margin-left:6px;cursor:pointer;font-size:16px;">⏏</span>
             <button id="btn-add-task" class="btn-add-task" title="Создать задачу" style="display:none;">+</button>
         </div>
         <div class="header-divider"></div>
@@ -43,5 +44,11 @@
     </div>
     <div id="tasks"></div>
     <script src="/static/tasks.js"></script>
+    <script>
+        document.getElementById('btn-logout').addEventListener('click', () => {
+            document.cookie = 'BITRIX_WEBHOOK=; path=/; max-age=0';
+            window.location.href = '/';
+        });
+    </script>
 </body>
 </html>
