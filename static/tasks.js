@@ -283,7 +283,12 @@ function renderGroupInto(container, group) {
     let ul = document.createElement('ul');
     ul.style.marginTop = '0px';
     ul.style.marginBottom = '8px';
-    group.tasks.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    group.tasks.sort((a, b) => {
+        if (!a.date && !b.date) return 0;
+        if (!a.date) return 1;
+        if (!b.date) return -1;
+        return a.date.localeCompare(b.date);
+    });
     for (const t of group.tasks) {
         ul.appendChild(createTaskLi(t));
     }
@@ -359,7 +364,12 @@ function renderInventory() {
             const ul = document.createElement('ul');
             ul.style.marginTop = '0px';
             ul.style.marginBottom = '8px';
-            group.tasks.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+            group.tasks.sort((a, b) => {
+                if (!a.date && !b.date) return 0;
+                if (!a.date) return 1;
+                if (!b.date) return -1;
+                return a.date.localeCompare(b.date);
+            });
             for (const t of group.tasks) {
                 ul.appendChild(createTaskLiInventory(t, MAX));
             }
