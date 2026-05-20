@@ -21,6 +21,41 @@ def index():
 # API-эндпоинт для потоковой передачи задач
 from flask import Response
 import json
+from datetime import datetime, timezone
+
+
+def _get_portal_tz(webhook, headers):
+    """Возвращает tzinfo часового пояса портала Bitrix24 (через server.time)."""
+    try:
+        resp = requests.get(f'{webhook}server.time', headers=headers, timeout=10)
+        if resp.status_code != 200:
+            return None
+        portal_time_str = resp.json().get('result', '') or ''
+        portal_dt = datetime.fromisoformat(portal_time_str.replace('Z', '+00:00'))
+        return portal_dt.tzinfo
+    except Exception:
+        return None
+
+
+def _build_changed_date_filter(update_from, webhook, headers):
+    """Готовит значение filter[>=CHANGED_DATE] из UTC-таймстампа клиента.
+
+    Клиент шлёт UTC (new Date().toISOString()). Bitrix24 интерпретирует дату без TZ
+    в часовом поясе своего портала, поэтому конвертируем клиентский UTC в TZ портала.
+    """
+    if not update_from:
+        return None
+    try:
+        dt_client = datetime.fromisoformat(update_from.replace('Z', '+00:00'))
+    except (ValueError, AttributeError):
+        return None
+    if dt_client.tzinfo is None:
+        dt_client = dt_client.replace(tzinfo=timezone.utc)
+    portal_tz = _get_portal_tz(webhook, headers)
+    if portal_tz is not None:
+        return dt_client.astimezone(portal_tz).strftime('%Y-%m-%dT%H:%M:%S')
+    # Fallback: явно указываем UTC offset, чтобы Bitrix24 однозначно понял.
+    return dt_client.astimezone(timezone.utc).isoformat()
 
 
 @app.route('/api/tasks')
@@ -28,12 +63,12 @@ def api_tasks():
     BITRIX_WEBHOOK = get_webhook()
     if not BITRIX_WEBHOOK:
         return 'BITRIX_WEBHOOK cookie not set', 500
-    
+
     # Получаем параметр режима из query параметров
     from flask import request
     mode = request.args.get('mode', 'fromme')
     update_from = request.args.get('update_from', '')
-    
+
     url = f'{BITRIX_WEBHOOK}tasks.task.list'
     user_url = f'{BITRIX_WEBHOOK}user.current'
     headers = {
@@ -47,6 +82,12 @@ def api_tasks():
     user_id = str(user_data.get('result', {}).get('ID', ''))
     if not user_id:
         return Response(json.dumps({'error': 'Bitrix24 user.current error'}), mimetype='text/plain; charset=utf-8')
+
+    # Подготавливаем фильтр по дате изменения, корректно учитывая часовые пояса.
+    # Клиент шлёт UTC (toISOString). Bitrix24 при сравнении CHANGED_DATE использует
+    # часовой пояс портала, поэтому нужно конвертировать UTC в TZ портала и
+    # отдать дату без явного offset (Bitrix24 трактует её в своём TZ).
+    changed_date_filter = _build_changed_date_filter(update_from, BITRIX_WEBHOOK, headers)
 
     def generate():
         import sys
@@ -83,16 +124,8 @@ def api_tasks():
                 for key, value in filter_dict.items():
                     params[f'filter[{key}]'] = value
                 
-                # Если задан update_from, добавляем фильтр по дате изменения
-                if update_from:
-                    from datetime import datetime
-                    try:
-                        # Парсим ISO-формат из браузера и конвертируем в формат Bitrix24
-                        dt = datetime.fromisoformat(update_from.replace('Z', '+00:00'))
-                        dt_local = dt.astimezone()
-                        params['filter[>=CHANGED_DATE]'] = dt_local.strftime('%Y-%m-%dT%H:%M:%S')
-                    except (ValueError, AttributeError):
-                        pass
+                if changed_date_filter:
+                    params['filter[>=CHANGED_DATE]'] = changed_date_filter
                 
                 resp = requests.get(url, headers=headers, params=params, stream=True)
                 if resp.status_code != 200:
