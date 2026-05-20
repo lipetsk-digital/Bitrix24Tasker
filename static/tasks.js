@@ -528,23 +528,25 @@ async function lightRefresh() {
             } else {
                 MAX = Math.max(...allVersions);
             }
-            // Собираем задачи для обновления версии
-            const tasksToUpdate = data.newTasks.map(t => ({
-                id: t.id,
-                tags: t.tags || ''
-            }));
-            try {
-                await fetch('/api/setversion', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({tasks: tasksToUpdate, version: MAX})
-                });
-                // Обновляем version у загруженных задач локально
-                for (const t of data.newTasks) {
-                    t.version = MAX;
+            // Собираем задачи для обновления версии — только те, у которых версия ещё не MAX,
+            // иначе setversion трогает CHANGED_DATE и задача снова попадает в lightRefresh → бесконечный цикл.
+            const tasksToUpdate = data.newTasks
+                .filter(t => (t.version || 0) !== MAX)
+                .map(t => ({id: t.id, tags: t.tags || ''}));
+            if (tasksToUpdate.length > 0) {
+                try {
+                    await fetch('/api/setversion', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({tasks: tasksToUpdate, version: MAX})
+                    });
+                    const updatedIds = new Set(tasksToUpdate.map(t => t.id));
+                    for (const t of data.newTasks) {
+                        if (updatedIds.has(t.id)) t.version = MAX;
+                    }
+                } catch (e) {
+                    // ignore setversion errors
                 }
-            } catch (e) {
-                // ignore setversion errors
             }
         }
 
