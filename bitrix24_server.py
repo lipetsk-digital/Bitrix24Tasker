@@ -1,8 +1,39 @@
 import os
+import logging
+import re
 import requests
 from flask import Flask, render_template
 
 app = Flask(__name__)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+)
+logger = logging.getLogger('bitrix24')
+
+
+def _mask_webhook(url):
+    """Скрываем секретный токен в URL вебхука для безопасного логирования."""
+    return re.sub(r'(/rest/\d+/)[^/]+', r'\1***', url)
+
+
+def bitrix_request(method, url, **kwargs):
+    """Обёртка над requests, логирующая обращения к Битриксу с параметрами."""
+    params = kwargs.get('params')
+    data = kwargs.get('data')
+    json_body = kwargs.get('json')
+    logger.info(
+        'Bitrix24 %s %s params=%s data=%s json=%s',
+        method.upper(),
+        _mask_webhook(url),
+        params,
+        data,
+        json_body,
+    )
+    resp = requests.request(method, url, **kwargs)
+    logger.info('Bitrix24 %s %s -> status=%s', method.upper(), _mask_webhook(url), resp.status_code)
+    return resp
 
 
 def get_webhook():
@@ -40,7 +71,7 @@ def api_tasks():
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
     # Получаем сведения о текущем пользователе
-    user_resp = requests.get(user_url, headers=headers)
+    user_resp = bitrix_request('get', user_url, headers=headers)
     if user_resp.status_code != 200:
         return Response(json.dumps({'error': 'Bitrix24 user.current error'}), mimetype='text/plain; charset=utf-8')
     user_data = user_resp.json()
@@ -94,7 +125,7 @@ def api_tasks():
                     except (ValueError, AttributeError):
                         pass
                 
-                resp = requests.get(url, headers=headers, params=params, stream=True)
+                resp = bitrix_request('get', url, headers=headers, params=params, stream=True)
                 if resp.status_code != 200:
                     yield json.dumps({'error': 'Bitrix24 API error'}) + '\n'
                     break
@@ -214,7 +245,7 @@ def api_setversion():
         for i, tag in enumerate(tag_list):
             params[f'fields[TAGS][{i}]'] = tag
 
-        resp = requests.post(url, headers=headers, data=params)
+        resp = bitrix_request('post', url, headers=headers, data=params)
         results.append({'id': task_id, 'ok': resp.status_code == 200})
 
     return {'results': results}
@@ -229,7 +260,7 @@ def api_user():
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
-    resp = requests.get(user_url, headers=headers)
+    resp = bitrix_request('get', user_url, headers=headers)
     if resp.status_code != 200:
         return {'error': 'Bitrix24 user.current error'}, 500
     data = resp.json().get('result', {})
