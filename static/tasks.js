@@ -21,15 +21,9 @@ let projectsWithMyTasks = new Set(); // Множество для хранени
 let projectTaskCounts = {}; // Объект для хранения количества задач по проектам
 let currentUserData = {}; // Данные о текущем пользователе
 let currentMode = 'fromme'; // Текущий режим (fromme или all)
-const LAST_FETCH_LS_KEY = 'lastFetchTimestamp'; // Ключ localStorage для времени последней загрузки
-let lastFetchTimestamp = localStorage.getItem(LAST_FETCH_LS_KEY) || ''; // ISO-UTC время начала последнего запроса
+let lastFetchTimestamp = ''; // ISO-время начала последнего запроса
 let isUpdating = false; // Флаг, что обновление уже идёт
 let highlightedTaskIds = new Set(); // Множество задач для подсветки после обновления
-
-function setLastFetchTimestamp(iso) {
-    lastFetchTimestamp = iso;
-    try { localStorage.setItem(LAST_FETCH_LS_KEY, iso); } catch (e) {}
-}
 
 // Функция для подсчета задач по проектам
 function updateProjectTaskCounts() {
@@ -479,7 +473,7 @@ async function loadTasks() {
     projectsWithMyTasks.clear();
     projectTaskCounts = {};
     try {
-        setLastFetchTimestamp(new Date().toISOString());
+        lastFetchTimestamp = new Date().toISOString();
         const data = await fetchTasksFromServer();
         applyTaskData(data);
         showCheckmark();
@@ -497,7 +491,7 @@ async function refreshTasks() {
     isUpdating = true;
     showSpinner();
     try {
-        setLastFetchTimestamp(new Date().toISOString());
+        lastFetchTimestamp = new Date().toISOString();
         const data = await fetchTasksFromServer();
         applyTaskData(data);
         showCheckmark();
@@ -519,7 +513,7 @@ async function lightRefresh() {
     showSpinner();
     try {
         const prevTimestamp = lastFetchTimestamp;
-        setLastFetchTimestamp(new Date().toISOString());
+        lastFetchTimestamp = new Date().toISOString();
         const data = await fetchTasksFromServer(prevTimestamp);
 
         // В режиме инвентаризации присваиваем изменённым задачам текущую версию
